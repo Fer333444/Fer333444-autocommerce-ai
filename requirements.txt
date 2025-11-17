@@ -1,8 +1,9 @@
 fastapi
-uvicorn[standard]
-SQLAlchemy>=2.0
-asyncpg
+uvicorn
+sqlalchemy
 httpx
+asyncpg
 alembic
-pydantic>=2.0
-pydantic-settings
+pydantic
+python-dotenv
+watchfiles
