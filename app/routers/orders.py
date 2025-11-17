@@ -1,13 +1,17 @@
-
 from fastapi import APIRouter
-from app.services.orders_service import OrderCreate, OrderPublic, create_order_demo
+from pydantic import BaseModel
 
-router = APIRouter(prefix="/orders", tags=["orders"])
+router = APIRouter()
 
+# Modelo para recibir una orden
+class Order(BaseModel):
+    product_id: int
+    quantity: int
+    customer_email: str
 
-@router.post("/", response_model=OrderPublic)
-async def create_order(order: OrderCreate):
-    """
-    Endpoint de ejemplo que simula crear un pedido.
-    """
-    return create_order_demo(order)
+@router.post("/orders")
+async def create_order(order: Order):
+    return {
+        "message": "Orden recibida correctamente",
+        "order": order
+    }
