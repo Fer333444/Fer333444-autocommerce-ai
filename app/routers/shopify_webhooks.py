@@ -10,12 +10,17 @@ load_dotenv()
 
 router = APIRouter()
 
+# 🔐 Importante: la clave real NO va aquí
+# Se carga desde las variables de entorno
 SHOPIFY_WEBHOOK_SECRET = os.getenv("SHOPIFY_WEBHOOK_SECRET")
+
+if not SHOPIFY_WEBHOOK_SECRET:
+    raise Exception("❌ ERROR: Falta la variable de entorno SHOPIFY_WEBHOOK_SECRET en Render.")
 
 
 def verify_webhook(data: bytes, hmac_header: str) -> bool:
     digest = hmac.new(
-        SHOPIFY_WEBHOOK_SECRET.encode('utf-8'),
+        SHOPIFY_WEBHOOK_SECRET.encode("utf-8"),
         data,
         hashlib.sha256
     ).digest()
@@ -35,10 +40,10 @@ async def orders_create(
         raise HTTPException(status_code=401, detail="Invalid HMAC")
 
     data = json.loads(body.decode())
-    print("🛒 Nuevo pedido de Shopify recibido:")
+    print("🛒 Nuevo pedido recibido desde Shopify:")
     print(json.dumps(data, indent=4))
 
-    return {"status": "success"}
+    return {"status": "ok"}
 
 
 @router.post("/webhooks/products/update")
@@ -52,7 +57,7 @@ async def products_update(
         raise HTTPException(status_code=401, detail="Invalid HMAC")
 
     data = json.loads(body.decode())
-    print("📦 Producto actualizado en Shopify:")
+    print("📦 Producto actualizado desde Shopify:")
     print(json.dumps(data, indent=4))
 
-    return {"status": "success"}
+    return {"status": "ok"}
