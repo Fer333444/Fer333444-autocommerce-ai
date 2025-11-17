@@ -1,52 +1,62 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os
-from dotenv import load_dotenv
 
-# Routers
-from app.routers.health import router as health_router
-from app.routers.products import router as products_router
-from app.routers.orders import router as orders_router
-from app.routers.shopify_webhooks import router as shopify_router
+from app.database import create_db_and_tables
+from app.routers import shopify_webhooks
 
-load_dotenv()
+APP_NAME = "AutoCommerce AI – Backend"
+APP_VERSION = "1.0.0"
 
 app = FastAPI(
-    title="AutoCommerce AI",
-    description="Backend conectado a Shopify + Frontend Next.js",
-    version="1.0.0"
+    title=APP_NAME,
+    version=APP_VERSION,
+    description="Backend centralizado con integración Shopify + Neon + Webhooks"
 )
 
-# ===========================
-# CORS (Permitir Next.js)
-# ===========================
-
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# ----------------------------------------------------------
+# CORS: permite que Next.js / Shopify / Frontend accedan
+# ----------------------------------------------------------
+origins = [
+    "*",   # Puedes cambiarlo luego a tu dominio
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "*"],   # Durante desarrollo permitimos todo
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ===========================
-# Registrar Routers
-# ===========================
+# ----------------------------------------------------------
+# EVENTO AL INICIAR
+# ----------------------------------------------------------
+@app.on_event("startup")
+def on_startup():
+    print("🚀 AutoCommerce AI iniciando...")
+    print("🔧 Creando tablas si no existen en Neon...")
+    create_db_and_tables()
+    print("📦 Conexión a base de datos lista.")
+    print("🛒 Shopify Webhooks cargados.")
+    print("🌐 Sistema en línea.")
 
-app.include_router(health_router, prefix="/api")
-app.include_router(products_router, prefix="/api")
-app.include_router(orders_router, prefix="/api")
-
-# Shopify webhooks van SIN autenticación del frontend
-# solo con verificación HMAC
-app.include_router(shopify_router, prefix="/api/shopify")
-
-# ===========================
-# Ruta raíz
-# ===========================
-
+# ----------------------------------------------------------
+# HOME
+# ----------------------------------------------------------
 @app.get("/")
-def root():
-    return {"message": "AutoCommerce AI está funcionando correctamente 🚀"}
+async def home():
+    return {
+        "message": "AutoCommerce AI Backend activo 🚀",
+        "status": "online",
+        "version": APP_VERSION,
+    }
+
+# ----------------------------------------------------------
+# ROUTERS
+# ----------------------------------------------------------
+app.include_router(
+    shopify_webhooks.router,
+    prefix="/api/shopify",
+    tags=["Shopify Webhooks"]
+)
