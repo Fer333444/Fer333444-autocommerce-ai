@@ -2,10 +2,11 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Leer de NEON_DATABASE_URL en lugar de DATABASE_URL
+DATABASE_URL = os.getenv("NEON_DATABASE_URL")
 
 if not DATABASE_URL:
-    raise Exception("DATABASE_URL is missing")
+    raise Exception("NEON_DATABASE_URL is missing")
 
 engine = create_engine(DATABASE_URL)
 
