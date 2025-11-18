@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, BigInteger, ForeignKey
-from sqlalchemy.orm import relationship
-from database import Base
+from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship
+
+Base = declarative_base()
 
 
 class Order(Base):
@@ -19,10 +20,10 @@ class OrderItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("order.id"))
-    product_id = Column(BigInteger)
-    variant_id = Column(BigInteger)
+    product_id = Column(String)
+    variant_id = Column(String)
     title = Column(String)
-    quantity = Column(Integer)
     price = Column(Float)
+    quantity = Column(Integer)
 
     order = relationship("Order", back_populates="items")
