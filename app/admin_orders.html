@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel Admin - Pedidos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100">
+<div class="max-w-6xl mx-auto py-8">
+    <h1 class="text-2xl font-bold mb-6">Pedidos (Shopify + Neon)</h1>
+
+    <!-- Filtros -->
+    <form method="get" class="mb-4 flex flex-wrap gap-2 items-center">
+        <input
+            type="text"
+            name="search"
+            value="{{ search or '' }}"
+            placeholder="Buscar por nº pedido o ID Shopify"
+            class="border rounded px-3 py-2 w-64"
+        />
+        <select name="status" class="border rounded px-3 py-2">
+            <option value="">Todos los estados</option>
+            {% for st in ["paid", "pending", "refunded", "voided", "canceled"] %}
+                <option value="{{ st }}" {% if status == st %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+        </select>
+        <button class="bg-black text-white px-4 py-2 rounded">Filtrar</button>
+    </form>
+
+    <!-- Tabla -->
+    <div class="bg-white rounded shadow">
+        <table class="min-w-full text-sm">
+            <thead class="bg-slate-200">
+            <tr>
+                <th class="px-4 py-2 text-left">ID</th>
+                <th class="px-4 py-2 text-left">Nº Pedido</th>
+                <th class="px-4 py-2 text-left">Shopify ID</th>
+                <th class="px-4 py-2 text-left">Estado</th>
+                <th class="px-4 py-2 text-left">Total</th>
+                <th class="px-4 py-2 text-left">Fecha</th>
+                <th class="px-4 py-2"></th>
+            </tr>
+            </thead>
+            <tbody>
+            {% if orders %}
+                {% for o in orders %}
+                    <tr class="border-t hover:bg-slate-50">
+                        <td class="px-4 py-2">{{ o.id }}</td>
+                        <td class="px-4 py-2">{{ o.order_number or "-" }}</td>
+                        <td class="px-4 py-2">{{ o.shopify_order_id }}</td>
+                        <td class="px-4 py-2">
+                            <span class="px-2 py-1 rounded text-xs
+                                {% if o.financial_status == 'paid' %} bg-green-100 text-green-800
+                                {% elif o.financial_status == 'pending' %} bg-yellow-100 text-yellow-800
+                                {% elif o.financial_status in ['voided', 'canceled'] %} bg-red-100 text-red-800
+                                {% else %} bg-slate-100 text-slate-800 {% endif %}
+                            ">
+                                {{ o.financial_status or '-' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2">
+                            {% if o.total_price %}
+                                {{ o.total_price }} {{ o.currency or '' }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            {% if o.created_at %}
+                                {{ o.created_at }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2 text-right">
+                            <a href="/admin/orders/{{ o.id }}" class="text-blue-600 hover:underline">
+                                Ver detalle
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td class="px-4 py-4 text-center text-slate-500" colspan="7">
+                        No hay pedidos aún.
+                    </td>
+                </tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    <div class="flex justify-between items-center mt-4">
+        <div class="text-sm text-slate-600">
+            Total: {{ total }} pedidos
+        </div>
+        <div class="flex gap-2">
+            {% if page > 1 %}
+                <a href="?page={{ page - 1 }}&page_size={{ page_size }}{% if status %}&status={{ status }}{% endif %}{% if search %}&search={{ search }}{% endif %}"
+                   class="px-3 py-1 border rounded bg-white hover:bg-slate-50">
+                    « Anterior
+                </a>
+            {% endif %}
+            <span class="px-3 py-1 text-sm">
+                Página {{ page }} de {{ total_pages }}
+            </span>
+            {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}&page_size={{ page_size }}{% if status %}&status={{ status }}{% endif %}{% if search %}&search={{ search }}{% endif %}"
+                   class="px-3 py-1 border rounded bg-white hover:bg-slate-50">
+                    Siguiente »
+                </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</body>
+</html>

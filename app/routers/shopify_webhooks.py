@@ -1,135 +1,134 @@
-from fastapi import APIRouter, Request, Header, HTTPException, Depends
+from fastapi import APIRouter, Request, Header, HTTPException
 import hmac
 import hashlib
 import base64
 import json
-from sqlmodel import Session
-from app.database import get_session
-from app.models import Customer, Order, OrderItem, RawWebhook
 import os
+from dotenv import load_dotenv
+from sqlalchemy import insert
+from database import orders_table, order_items_table, raw_webhook_table, database
+
+load_dotenv()
 
 router = APIRouter()
 
+# -------------------------------
+#  HMAC VERIFICATION
+# -------------------------------
 SHOPIFY_WEBHOOK_SECRET = os.getenv("SHOPIFY_WEBHOOK_SECRET")
 
-if not SHOPIFY_WEBHOOK_SECRET:
-    raise Exception("❌ ERROR: Falta SHOPIFY_WEBHOOK_SECRET en variables de entorno")
+def verify_webhook(data: bytes, hmac_header: str) -> bool:
+    digest = hmac.new(
+        SHOPIFY_WEBHOOK_SECRET.encode("utf-8"),
+        data,
+        hashlib.sha256
+    ).digest()
+
+    calculated_hmac = base64.b64encode(digest).decode()
+    return hmac.compare_digest(calculated_hmac, hmac_header)
 
 
-def verify_webhook(body: bytes, hmac_header: str) -> bool:
-    """Verifica que Shopify envía el webhook correcto usando HMAC-SHA256."""
-
-    computed_hmac = base64.b64encode(
-        hmac.new(
-            SHOPIFY_WEBHOOK_SECRET.encode("utf-8"),
-            body,
-            hashlib.sha256
-        ).digest()
-    ).decode()
-
-    return hmac.compare_digest(computed_hmac, hmac_header)
-
-
-# ============================================================
-# 🛒 WEBHOOK: orders/create
-# ============================================================
-@router.post("/webhooks/orders/create")
-async def orders_create(
-    request: Request,
-    x_shopify_hmac_sha256: str = Header(None),
-    session: Session = Depends(get_session)
-):
-
+# ========================================
+# 1️⃣ WEBHOOK — ORDER CREATED
+# ========================================
+@router.post("/shopify/webhooks/orders/create")
+async def orders_create(request: Request, x_shopify_hmac_sha256: str = Header(None)):
     body = await request.body()
 
-    # 1. Validar firma HMAC
     if not verify_webhook(body, x_shopify_hmac_sha256):
-        raise HTTPException(status_code=401, detail="Invalid HMAC signature")
+        raise HTTPException(status_code=401, detail="Invalid HMAC")
 
     data = json.loads(body.decode())
+    print("🟩 NUEVO PEDIDO RECIBIDO:", data.get("id"))
 
-    # 2. Registrar RAW webhook
-    raw = RawWebhook(
-        topic="orders/create",
+    # Guardar copia cruda del webhook
+    await database.execute(raw_webhook_table.insert().values(
+        event="order_created",
         payload=json.dumps(data)
-    )
-    session.add(raw)
-    session.commit()
+    ))
 
-    print("📥 Recibido webhook de creación de pedido")
+    # Insertar pedido
+    order_data = {
+        "shopify_order_id": data.get("id"),
+        "order_number": data.get("order_number"),
+        "financial_status": data.get("financial_status")
+    }
+    order_id = await database.execute(insert(orders_table).values(order_data))
 
-    # 3. Registrar cliente
-    customer_data = data.get("customer", {})
+    # Guardar los productos del pedido
+    for item in data.get("line_items", []):
+        item_data = {
+            "order_id": order_id,
+            "product_id": item.get("product_id"),
+            "variant_id": item.get("variant_id"),
+            "title": item.get("title"),
+            "quantity": item.get("quantity"),
+            "price": item.get("price")
+        }
+        await database.execute(insert(order_items_table).values(item_data))
 
-    customer = Customer(
-        shopify_customer_id=str(customer_data.get("id")),
-        email=customer_data.get("email"),
-        first_name=customer_data.get("first_name"),
-        last_name=customer_data.get("last_name"),
-        phone=customer_data.get("phone"),
-    )
-    session.add(customer)
-    session.commit()
-
-    # 4. Registrar pedido
-    order = Order(
-        shopify_order_id=str(data.get("id")),
-        order_number=str(data.get("order_number")),
-        financial_status=data.get("financial_status"),
-        fulfillment_status=data.get("fulfillment_status"),
-        total_price=data.get("total_price"),
-        currency=data.get("currency"),
-        customer_id=customer.id,
-    )
-    session.add(order)
-    session.commit()
-
-    # 5. Registrar items del pedido
-    line_items = data.get("line_items", [])
-
-    for item in line_items:
-        order_item = OrderItem(
-            order_id=order.id,
-            product_id=str(item.get("product_id")),
-            product_title=item.get("title"),
-            quantity=item.get("quantity"),
-            price=item.get("price"),
-        )
-        session.add(order_item)
-
-    session.commit()
-
-    print("🛒 Pedido guardado correctamente en la base de datos Neon.")
-
-    return {"status": "success"}
+    print("🟢 Pedido guardado correctamente.")
+    return {"status": "ok"}
 
 
-# ============================================================
-# 📦 WEBHOOK: products/update
-# ============================================================
-@router.post("/webhooks/products/update")
-async def products_update(
-    request: Request,
-    x_shopify_hmac_sha256: str = Header(None),
-    session: Session = Depends(get_session)
-):
-
+# ========================================
+# 2️⃣ WEBHOOK — ORDER UPDATED
+# ========================================
+@router.post("/shopify/webhooks/orders/update")
+async def orders_update(request: Request, x_shopify_hmac_sha256: str = Header(None)):
     body = await request.body()
 
-    # Validar firma
     if not verify_webhook(body, x_shopify_hmac_sha256):
-        raise HTTPException(status_code=401, detail="Invalid HMAC signature")
+        raise HTTPException(status_code=401, detail="Invalid HMAC")
 
     data = json.loads(body.decode())
+    print("🟦 PEDIDO ACTUALIZADO:", data.get("id"))
 
-    # Guardar RAW
-    raw = RawWebhook(
-        topic="products/update",
+    await database.execute(raw_webhook_table.insert().values(
+        event="order_updated",
         payload=json.dumps(data)
-    )
-    session.add(raw)
-    session.commit()
+    ))
 
-    print("📦 Producto actualizado recibido y guardado en RAW.")
+    return {"status": "updated"}
 
-    return {"status": "success"}
+
+# ========================================
+# 3️⃣ WEBHOOK — ORDER DELETED
+# ========================================
+@router.post("/shopify/webhooks/orders/delete")
+async def orders_delete(request: Request, x_shopify_hmac_sha256: str = Header(None)):
+    body = await request.body()
+
+    if not verify_webhook(body, x_shopify_hmac_sha256):
+        raise HTTPException(status_code=401, detail="Invalid HMAC")
+
+    data = json.loads(body.decode())
+    print("🟥 PEDIDO ELIMINADO:", data.get("id"))
+
+    await database.execute(raw_webhook_table.insert().values(
+        event="order_deleted",
+        payload=json.dumps(data)
+    ))
+
+    return {"status": "deleted"}
+
+
+# ========================================
+# 4️⃣ WEBHOOK — PRODUCT UPDATED
+# ========================================
+@router.post("/shopify/webhooks/products/update")
+async def products_update(request: Request, x_shopify_hmac_sha256: str = Header(None)):
+    body = await request.body()
+
+    if not verify_webhook(body, x_shopify_hmac_sha256):
+        raise HTTPException(status_code=401, detail="Invalid HMAC")
+
+    data = json.loads(body.decode())
+    print("🟨 PRODUCTO ACTUALIZADO:", data.get("id"))
+
+    await database.execute(raw_webhook_table.insert().values(
+        event="product_updated",
+        payload=json.dumps(data)
+    ))
+
+    return {"status": "product_updated"}

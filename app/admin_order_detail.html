@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Detalle pedido</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100">
+<div class="max-w-4xl mx-auto py-8">
+    <a href="/admin/orders" class="text-blue-600 hover:underline text-sm">&larr; Volver a pedidos</a>
+
+    {% if not order %}
+        <h1 class="text-2xl font-bold mt-4">Pedido no encontrado</h1>
+    {% else %}
+        <h1 class="text-2xl font-bold mt-4">
+            Pedido #{{ order.order_number or order.id }}
+        </h1>
+
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-white rounded shadow p-4">
+                <h2 class="font-semibold mb-2">Información general</h2>
+                <p><span class="font-semibold">ID DB:</span> {{ order.id }}</p>
+                <p><span class="font-semibold">ID Shopify:</span> {{ order.shopify_order_id }}</p>
+                <p><span class="font-semibold">Estado pago:</span> {{ order.financial_status or '-' }}</p>
+                <p><span class="font-semibold">Total:</span>
+                    {% if order.total_price %}{{ order.total_price }} {{ order.currency or '' }}{% else %}-{% endif %}
+                </p>
+                <p><span class="font-semibold">Creado:</span> {{ order.created_at or '-' }}</p>
+            </div>
+
+            <div class="bg-white rounded shadow p-4">
+                <h2 class="font-semibold mb-2">Cliente</h2>
+                <p><span class="font-semibold">Nombre:</span> {{ order.customer_name or '-' }}</p>
+                <p><span class="font-semibold">Email:</span> {{ order.customer_email or '-' }}</p>
+                <p><span class="font-semibold">País:</span> {{ order.customer_country or '-' }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded shadow p-4 mt-6">
+            <h2 class="font-semibold mb-2">Productos</h2>
+            {% if items %}
+                <table class="min-w-full text-sm">
+                    <thead class="bg-slate-200">
+                    <tr>
+                        <th class="px-3 py-2 text-left">Producto</th>
+                        <th class="px-3 py-2 text-left">Variant ID</th>
+                        <th class="px-3 py-2 text-right">Cantidad</th>
+                        <th class="px-3 py-2 text-right">Precio</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for it in items %}
+                        <tr class="border-t">
+                            <td class="px-3 py-2">{{ it.title or '-' }}</td>
+                            <td class="px-3 py-2">{{ it.variant_id or '-' }}</td>
+                            <td class="px-3 py-2 text-right">{{ it.quantity }}</td>
+                            <td class="px-3 py-2 text-right">
+                                {% if it.price %}{{ it.price }}{% else %}-{% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="text-slate-500 text-sm">Este pedido no tiene items guardados.</p>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+</body>
+</html>
