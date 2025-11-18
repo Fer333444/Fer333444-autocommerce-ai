@@ -1,14 +1,14 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
-from sqlalchemy.orm import declarative_base, relationship
+# app/models.py
 
-Base = declarative_base()
-
+from sqlalchemy import Column, Integer, String, Numeric, BigInteger, ForeignKey
+from sqlalchemy.orm import relationship
+from .database import Base
 
 class Order(Base):
     __tablename__ = "order"
 
     id = Column(Integer, primary_key=True, index=True)
-    shopify_order_id = Column(String, index=True)
+    shopify_order_id = Column(BigInteger, index=True)
     order_number = Column(String)
     financial_status = Column(String)
 
@@ -20,10 +20,10 @@ class OrderItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("order.id"))
-    product_id = Column(String)
-    variant_id = Column(String)
+    product_id = Column(BigInteger)
+    variant_id = Column(BigInteger)
     title = Column(String)
-    price = Column(Float)
     quantity = Column(Integer)
+    price = Column(Numeric(10,2))
 
     order = relationship("Order", back_populates="items")

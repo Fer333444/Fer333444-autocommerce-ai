@@ -1,146 +1,167 @@
-from fastapi import FastAPI, Request, Depends, HTTPException
+# app/main.py
+
+from typing import Any, Dict
+
+from fastapi import FastAPI, Request, Depends, status
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db, Base, engine
-from app.models import Order, OrderItem
+from .database import engine, Base, get_db
+from .models import Order, OrderItem
 
-import uvicorn
-
-# Crear tablas si no existen
+# Crear tablas en la base de datos (si no existen)
 Base.metadata.create_all(bind=engine)
 
-# App
-app = FastAPI()
+app = FastAPI(
+    title="Autocommerce AI",
+    version="1.0.0",
+)
 
-# Templates (para /admin/orders)
+# Ruta donde están tus templates en Render
 templates = Jinja2Templates(directory="app/templates")
 
 
-# -------------------------------------------------------------
-# HEALTH CHECK
-# -------------------------------------------------------------
-@app.get("/")
-def health():
-    return {"status": "OK", "message": "Server running"}
+# --------------------------
+#   HEALTH CHECK
+# --------------------------
+@app.get("/health", tags=["system"])
+def health() -> Dict[str, Any]:
+    return {"status": "ok"}
 
 
-# -------------------------------------------------------------
-# WEBHOOK SHOPIFY - ORDER CREATE
-# -------------------------------------------------------------
-@app.post("/api/shopify/webhooks/orders/create")
-async def shopify_order_create(request: Request, db: Session = Depends(get_db)):
+# --------------------------
+#   HOME (REDIRIGE A ADMIN)
+# --------------------------
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/admin/orders", status_code=status.HTTP_302_FOUND)
+
+
+# --------------------------
+#   WEBHOOK DE SHOPIFY
+#   /api/shopify/webhooks/orders/create
+# --------------------------
+@app.post("/api/shopify/webhooks/orders/create", tags=["webhooks"])
+async def shopify_order_created(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Webhook de creación de pedido de Shopify.
+    Guarda el pedido y sus ítems en Neon.
+    """
     try:
-        data = await request.json()
-
-        shopify_order_id = data.get("id")
-        order_number = data.get("order_number")
-        financial_status = data.get("financial_status", "unknown")
-        total_price = data.get("total_price", "0.00")
-
-        # Guardar el pedido principal
-        order = Order(
-            shopify_order_id=shopify_order_id,
-            order_number=str(order_number),
-            financial_status=financial_status,
-            total_price=total_price
+        payload = await request.json()
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Invalid JSON"},
         )
-        db.add(order)
-        db.commit()
-        db.refresh(order)
 
-        # Guardar items
-        for item in data.get("line_items", []):
-            order_item = OrderItem(
-                order_id=order.id,
-                product_id=item.get("product_id"),
-                variant_id=item.get("variant_id"),
-                title=item.get("title"),
-                quantity=item.get("quantity"),
-                price=item.get("price")
-            )
-            db.add(order_item)
+    # --- Datos principales del pedido ---
+    shopify_order_id = payload.get("id")
+    order_number = payload.get("order_number") or str(payload.get("id"))
+    financial_status = payload.get("financial_status") or ""
 
-        db.commit()
+    # ¿Ya existe este pedido? (idempotencia básica)
+    existing = db.query(Order).filter(Order.shopify_order_id == shopify_order_id).first()
+    if existing:
+        return JSONResponse(
+            status_code=200,
+            content={"detail": "Order already stored"},
+        )
 
-        return JSONResponse({"success": True})
+    # Crear objeto Order
+    order = Order(
+        shopify_order_id=shopify_order_id,
+        order_number=str(order_number),
+        financial_status=financial_status,
+    )
+    db.add(order)
+    db.flush()  # para obtener order.id sin hacer commit todavía
 
-    except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+    # --- Ítems del pedido ---
+    line_items = payload.get("line_items", []) or []
 
+    for item in line_items:
+        product_id = item.get("product_id")
+        variant_id = item.get("variant_id")
+        title = item.get("title") or ""
+        quantity = item.get("quantity") or 0
+        price = item.get("price") or "0"
 
-# -------------------------------------------------------------
-# WEBHOOK SHOPIFY - ORDER UPDATE
-# -------------------------------------------------------------
-@app.post("/api/shopify/webhooks/orders/updated")
-async def shopify_order_updated(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    shopify_order_id = data.get("id")
-
-    order = db.query(Order).filter(Order.shopify_order_id == shopify_order_id).first()
-    if not order:
-        return {"status": "ignored", "message": "Order not found"}
-
-    order.financial_status = data.get("financial_status", order.financial_status)
-    order.total_price = data.get("total_price", order.total_price)
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=product_id,
+            variant_id=variant_id,
+            title=title,
+            quantity=quantity,
+            price=price,
+        )
+        db.add(order_item)
 
     db.commit()
 
-    return {"success": True}
-
-
-# -------------------------------------------------------------
-# WEBHOOK SHOPIFY - ORDER DELETE
-# -------------------------------------------------------------
-@app.post("/api/shopify/webhooks/orders/delete")
-async def shopify_order_delete(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    shopify_order_id = data.get("id")
-
-    order = db.query(Order).filter(Order.shopify_order_id == shopify_order_id).first()
-    if not order:
-        return {"ignored": True}
-
-    db.delete(order)
-    db.commit()
-
-    return {"success": True}
-
-
-# -------------------------------------------------------------
-# PÁGINA ADMIN - LISTA DE PEDIDOS
-# -------------------------------------------------------------
-@app.get("/admin/orders")
-def admin_orders(request: Request, db: Session = Depends(get_db)):
-    orders = db.query(Order).all()
-
-    enriched_orders = []
-    for order in orders:
-        items = (
-            db.query(OrderItem)
-            .filter(OrderItem.order_id == order.id)
-            .all()
-        )
-
-        enriched_orders.append({
-            "id": order.id,
-            "shopify_order_id": order.shopify_order_id,
-            "order_number": order.order_number,
-            "financial_status": order.financial_status,
-            "created_at": order.created_at,
-            "total_price": order.total_price,
-            "items": items
-        })
-
-    return templates.TemplateResponse(
-        "admin_orders.html",
-        {"request": request, "orders": enriched_orders}
+    return JSONResponse(
+        status_code=200,
+        content={"detail": "Order stored successfully"},
     )
 
 
-# -------------------------------------------------------------
-# EJECUCIÓN LOCAL
-# -------------------------------------------------------------
-if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+# --------------------------
+#   PANEL ADMIN – LISTA DE PEDIDOS
+#   GET /admin/orders
+# --------------------------
+@app.get("/admin/orders", response_class=HTMLResponse, tags=["admin"])
+def admin_orders(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Muestra listado de pedidos guardados en Neon.
+    """
+    orders = db.query(Order).order_by(Order.id.desc()).all()
+    return templates.TemplateResponse(
+        "admin_orders.html",
+        {
+            "request": request,
+            "orders": orders,
+        },
+    )
+
+
+# --------------------------
+#   PANEL ADMIN – DETALLE PEDIDO
+#   GET /admin/orders/{order_id}
+# --------------------------
+@app.get("/admin/orders/{order_id}", response_class=HTMLResponse, tags=["admin"])
+def admin_order_detail(
+    order_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Muestra detalle de un pedido, con sus ítems.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        return templates.TemplateResponse(
+            "admin_order_detail.html",
+            {
+                "request": request,
+                "order": None,
+                "error": f"Pedido con id {order_id} no encontrado.",
+            },
+            status_code=404,
+        )
+
+    # gracias a relationship, order.items ya trae los OrderItem
+    return templates.TemplateResponse(
+        "admin_order_detail.html",
+        {
+            "request": request,
+            "order": order,
+            "items": order.items,
+        },
+    )
