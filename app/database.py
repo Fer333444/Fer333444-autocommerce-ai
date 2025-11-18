@@ -1,21 +1,12 @@
+# database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 import os
-from sqlmodel import SQLModel, create_engine, Session
-from dotenv import load_dotenv
 
-load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-DATABASE_URL = os.getenv("NEON_DATABASE_URL")
+engine = create_engine(DATABASE_URL, echo=False)
 
-if not DATABASE_URL:
-    raise Exception("❌ NEON_DATABASE_URL no fue encontrado en variables de entorno")
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-engine = create_engine(DATABASE_URL, echo=True)
-
-
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
-
-
-def get_session():
-    with Session(engine) as session:
-        yield session
+Base = declarative_base()
