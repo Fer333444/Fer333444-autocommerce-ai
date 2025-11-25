@@ -1,11 +1,9 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
 
-# IMPORT CORREGIDO
 from app.database import engine, Base, get_db
-from routers import admin_orders, shopify_webhook
+from app.routers import admin_orders, shopify_webhook
 
 # ---------------------------------------------------------
 #  CREAR TABLAS EN LA BASE DE DATOS
@@ -27,12 +25,12 @@ app = FastAPI(
 templates = Jinja2Templates(directory="app/templates")
 
 # ---------------------------------------------------------
-#  MONTAR CARPETA STATIC (si algún día agregas CSS/JS)
+#  MONTAR CARPETA STATIC
 # ---------------------------------------------------------
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # ---------------------------------------------------------
-#  INCLUIR ROUTERS (ADMIN Y SHOPIFY)
+#  INCLUIR ROUTERS
 # ---------------------------------------------------------
 app.include_router(admin_orders.router)
 app.include_router(shopify_webhook.router)
