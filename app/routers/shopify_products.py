@@ -1,74 +1,55 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Header
+import hmac
+import hashlib
+import base64
 import os
-import requests
+import json
 
 router = APIRouter(
     prefix="/shopify",
-    tags=["Shopify"]
+    tags=["Shopify Webhooks"]
 )
 
-# ---------------------------------------------------------
-#  CARGAR VARIABLES DE ENTORNO (Render)
-# ---------------------------------------------------------
-SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
 SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET")
-SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
-SHOPIFY_STORE_URL = os.getenv("SHOPIFY_STORE_URL")
 
 
-# ---------------------------------------------------------
-#  CLIENTE PARA CREAR PRODUCTOS EN SHOPIFY
-# ---------------------------------------------------------
-def create_shopify_product(title: str, description: str, price: float, image_url: str = None):
+# --------------------------------------------------
+# 🛡️ VALIDAR QUE EL WEBHOOK VIENE DE SHOPIFY
+# --------------------------------------------------
+def verify_webhook(hmac_header: str, body: bytes) -> bool:
+    digest = hmac.new(
+        SHOPIFY_API_SECRET.encode("utf-8"),
+        body,
+        hashlib.sha256
+    ).digest()
 
-    if not SHOPIFY_ACCESS_TOKEN or not SHOPIFY_STORE_URL:
-        return {"error": "Variables de entorno de Shopify no configuradas"}
+    calculated_hmac = base64.b64encode(digest).decode()
 
-    api_url = f"https://{SHOPIFY_STORE_URL}/admin/api/2024-07/products.json"
-
-    payload = {
-        "product": {
-            "title": title,
-            "body_html": description,
-            "variants": [
-                {
-                    "price": str(price)
-                }
-            ]
-        }
-    }
-
-    if image_url:
-        payload["product"]["images"] = [{"src": image_url}]
-
-    headers = {
-        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-        "Content-Type": "application/json"
-    }
-
-    response = requests.post(api_url, json=payload, headers=headers)
-
-    try:
-        return response.json()
-    except:
-        return {"error": "No se pudo procesar la respuesta de Shopify"}
+    return hmac.compare_digest(calculated_hmac, hmac_header)
 
 
-# ---------------------------------------------------------
-#  ENDPOINT DE PRUEBA
-# ---------------------------------------------------------
-@router.get("/test")
-def test_shopify_product():
-    """Crea un producto de prueba en Shopify para confirmar conexión"""
+# --------------------------------------------------
+# 📦 WEBHOOK — ACTUALIZACIÓN DE PRODUCTO
+# --------------------------------------------------
+@router.post("/webhook/products/update")
+async def webhook_products_update(
+    request: Request,
+    x_shopify_hmac_sha256: str = Header(None)
+):
+    body = await request.body()
 
-    product = create_shopify_product(
-        title="Producto Autocommerce AI (Prueba)",
-        description="Este producto fue creado automáticamente desde FastAPI en Render.",
-        price=19.99,
-        image_url="https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/1024px-No_image_available.svg.png"
-    )
+    # 1. Validar firma
+    if not verify_webhook(x_shopify_hmac_sha256, body):
+        return {"status": "error", "message": "Invalid HMAC"}
 
-    return {
-        "status": "OK",
-        "result": product
-    }
+    # 2. Convertir JSON
+    data = json.loads(body)
+
+    product_id = data.get("id")
+    title = data.get("title")
+
+    print("📦 Webhook recibido: PRODUCT UPDATE")
+    print(f"ID: {product_id}")
+    print(f"Título: {title}")
+
+    return {"status": "ok", "product_id": product_id, "title": title}
