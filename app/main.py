@@ -1,13 +1,17 @@
+# app/main.py
+
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
-from app.database import engine, Base, get_db
+from app.database import engine, Base
 
-# IMPORTS CORREGIDOS
-from app.routers import admin_panel
-from app.routers import shopify_webhooks
-from app.routers import shopify_products   # <-- este sí lo añadiste tú
+# Routers
+from app.routers import (
+    admin_orders,
+    shopify_webhook,
+    shopify_products
+)
 
 # ---------------------------------------------------------
 #  CREAR TABLAS EN LA BASE DE DATOS
@@ -19,7 +23,7 @@ Base.metadata.create_all(bind=engine)
 # ---------------------------------------------------------
 app = FastAPI(
     title="Autocommerce AI Backend",
-    description="Sistema de pedidos + Webhook + Panel Admin",
+    description="Sistema de pedidos + Webhook + Panel Admin + Productos Shopify",
     version="1.0"
 )
 
@@ -29,16 +33,17 @@ app = FastAPI(
 templates = Jinja2Templates(directory="app/templates")
 
 # ---------------------------------------------------------
-#  MONTAR CARPETA STATIC
+#  ARCHIVOS ESTÁTICOS
 # ---------------------------------------------------------
+# (Esta carpeta ya existe gracias al .gitkeep)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # ---------------------------------------------------------
 #  INCLUIR ROUTERS
 # ---------------------------------------------------------
-app.include_router(admin_panel.router)
-app.include_router(shopify_webhooks.router)
-app.include_router(shopify_products.router)
+app.include_router(admin_orders.router)      # Panel admin de pedidos
+app.include_router(shopify_webhook.router)   # Webhooks de Shopify
+app.include_router(shopify_products.router)  # Creación/envío de productos a Shopify
 
 # ---------------------------------------------------------
 #  RUTA PRINCIPAL
@@ -49,7 +54,8 @@ def home():
         "status": "ok",
         "message": "Autocommerce AI Backend funcionando correctamente 🧠⚡",
         "docs": "/docs",
-        "admin_panel": "/admin/orders"
+        "admin_panel": "/admin/orders",
+        "shopify_test_product": "/shopify/test"
     }
 
 # ---------------------------------------------------------
@@ -58,4 +64,3 @@ def home():
 @app.get("/health")
 def health():
     return {"status": "healthy"}
- 	
