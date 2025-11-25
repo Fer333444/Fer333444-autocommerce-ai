@@ -3,7 +3,11 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base, get_db
-from app.routers import admin_orders, shopify_webhook
+
+# IMPORTS CORREGIDOS
+from app.routers import admin_panel
+from app.routers import shopify_webhooks
+from app.routers import shopify_products   # <-- este sí lo añadiste tú
 
 # ---------------------------------------------------------
 #  CREAR TABLAS EN LA BASE DE DATOS
@@ -32,8 +36,9 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # ---------------------------------------------------------
 #  INCLUIR ROUTERS
 # ---------------------------------------------------------
-app.include_router(admin_orders.router)
-app.include_router(shopify_webhook.router)
+app.include_router(admin_panel.router)
+app.include_router(shopify_webhooks.router)
+app.include_router(shopify_products.router)
 
 # ---------------------------------------------------------
 #  RUTA PRINCIPAL
@@ -48,8 +53,9 @@ def home():
     }
 
 # ---------------------------------------------------------
-#  HEALTH CHECK (Render lo usa)
+#  HEALTH CHECK
 # ---------------------------------------------------------
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+ 	

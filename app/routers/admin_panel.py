@@ -1,98 +1,168 @@
-from fastapi import APIRouter, Depends, Request, Query
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from app.database import get_db
+from app.models import Pedido, Producto
+import requests
+import os
+from datetime import datetime
 
-from database import get_session  # O el módulo donde tengas tu get_session
-from models import Order, OrderItem  # Ajusta al nombre real de tus modelos
+router = APIRouter(
+    prefix="/admin",
+    tags=["Admin Panel"]
+)
 
-router = APIRouter()
+# ---------------------------------------------------------
+#  VARIABLES DE ENTORNO PARA SHOPIFY Y AMAZON
+# ---------------------------------------------------------
+SHOPIFY_STORE_URL = os.getenv("SHOPIFY_STORE_URL")
+SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+AMAZON_API_STATUS_URL = os.getenv("AMAZON_API_STATUS_URL")  # (opcional)
 
-# Carpeta de templates (la creamos en el siguiente paso)
-templates = Jinja2Templates(directory="templates")
+
+# ---------------------------------------------------------
+#  FUNCIÓN PARA OBTENER PRODUCTOS DESDE SHOPIFY
+# ---------------------------------------------------------
+def obtener_productos_shopify():
+    try:
+        url = f"https://{SHOPIFY_STORE_URL}/admin/api/2024-07/products.json"
+        headers = {"X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN}
+        response = requests.get(url, headers=headers)
+        return response.json().get("products", [])
+    except:
+        return []
 
 
-@router.get("/orders")
-def admin_orders(
-    request: Request,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
-    db: Session = Depends(get_session),
-):
+# ---------------------------------------------------------
+#  FUNCIÓN PARA OBTENER ESTADO AMAZON SP-API
+# ---------------------------------------------------------
+def obtener_estado_amazon():
+    try:
+        if not AMAZON_API_STATUS_URL:
+            return {"status": "unknown", "detail": "No status URL"}
+        r = requests.get(AMAZON_API_STATUS_URL)
+        return r.json()
+    except:
+        return {"status": "error", "detail": "Amazon SP-API desconectado"}
+
+
+# ---------------------------------------------------------
+#  PLANTILLA HTML – PANEL ADMIN
+# ---------------------------------------------------------
+def render_panel_html(pedidos, productos, amazon_status):
+    html = f"""
+    <html>
+    <head>
+        <title>Panel Admin – Autocommerce AI</title>
+        <link rel="stylesheet"
+              href="https://cdn.datatables.net/1.13.1/css/jquery.dataTables.min.css" />
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="https://cdn.datatables.net/1.13.1/js/jquery.dataTables.min.js"></script>
+        <style>
+            body {{
+                font-family: Arial;
+                margin: 40px;
+            }}
+            .card {{
+                padding: 20px;
+                background: #f5f5f5;
+                border-radius: 10px;
+                margin-bottom: 30px;
+            }}
+        </style>
+    </head>
+
+    <body>
+
+        <h1>🧠 Autocommerce AI – Panel Admin</h1>
+        <p>Control completo de pedidos, Shopify, Amazon y sincronización.</p>
+
+        <div class="card">
+            <h2>⭐ Estado de APIs</h2>
+            <p><b>Shopify:</b> Conectado</p>
+            <p><b>Amazon SP-API:</b> {amazon_status}</p>
+        </div>
+
+        <div class="card">
+            <h2>📦 Pedidos Recibidos</h2>
+            <table id="pedidos" class="display">
+                <thead>
+                    <tr>
+                        <th>ID</th><th>Email</th><th>Tipo</th>
+                        <th>Total</th><th>Fecha</th>
+                    </tr>
+                </thead>
+                <tbody>
     """
-    Lista de pedidos con paginación, filtro por estado y búsqueda.
+
+    # Inyectamos los pedidos
+    for p in pedidos:
+        html += f"""
+            <tr>
+                <td>{p.id}</td>
+                <td>{p.email}</td>
+                <td>{p.tipo_compra}</td>
+                <td>{p.total}</td>
+                <td>{p.fecha}</td>
+            </tr>
+        """
+
+    html += """
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>🛒 Productos en Shopify</h2>
+            <table id="productos" class="display">
+                <thead>
+                    <tr>
+                        <th>ID</th><th>Título</th><th>Precio</th><th>Stock</th>
+                    </tr>
+                </thead>
+                <tbody>
     """
-    query = db.query(Order)
 
-    # Filtro por estado (financial_status)
-    if status:
-        query = query.filter(Order.financial_status == status)
+    # Productos Shopify
+    for prod in productos:
+        precio = prod["variants"][0]["price"] if prod.get("variants") else "-"
+        stock = prod["variants"][0]["inventory_quantity"] if prod.get("variants") else "-"
+        html += f"""
+            <tr>
+                <td>{prod["id"]}</td>
+                <td>{prod["title"]}</td>
+                <td>{precio}</td>
+                <td>{stock}</td>
+            </tr>
+        """
 
-    # Búsqueda por número de pedido o id de Shopify
-    if search:
-        like = f"%{search}%"
-        query = query.filter(
-            (Order.order_number.ilike(like)) |
-            (Order.shopify_order_id.ilike(like))
-        )
+    html += """
+                </tbody>
+            </table>
+        </div>
 
-    total = query.count()
-    orders = (
-        query
-        .order_by(Order.created_at.desc())  # si tienes created_at, si no, quita esto
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+        <script>
+            $(document).ready(function(){
+                $('#pedidos').DataTable();
+                $('#productos').DataTable();
+            });
+        </script>
 
-    total_pages = (total + page_size - 1) // page_size if total > 0 else 1
-
-    return templates.TemplateResponse(
-        "admin_orders.html",
-        {
-            "request": request,
-            "orders": orders,
-            "page": page,
-            "page_size": page_size,
-            "total": total,
-            "total_pages": total_pages,
-            "status": status,
-            "search": search,
-        },
-    )
-
-
-@router.get("/orders/{order_id}")
-def admin_order_detail(
-    order_id: int,
-    request: Request,
-    db: Session = Depends(get_session),
-):
+    </body>
+    </html>
     """
-    Detalle de un pedido: datos generales + productos.
-    """
-    order = db.query(Order).filter(Order.id == order_id).first()
-    if not order:
-        # Podríamos devolver 404, pero para el panel es cómodo mostrar página vacía
-        return templates.TemplateResponse(
-            "admin_order_detail.html",
-            {"request": request, "order": None, "items": []},
-        )
 
-    # Carga de items (ajusta a tu relación real)
-    items: List[OrderItem] = (
-        db.query(OrderItem)
-        .filter(OrderItem.order_id == order.id)
-        .all()
-    )
+    return html
 
-    return templates.TemplateResponse(
-        "admin_order_detail.html",
-        {
-            "request": request,
-            "order": order,
-            "items": items,
-        },
-    )
+
+# ---------------------------------------------------------
+#  ENDPOINT PRINCIPAL DEL PANEL ADMIN
+# ---------------------------------------------------------
+@router.get("/orders", response_class=HTMLResponse)
+def admin_orders(request: Request, db: Session = Depends(get_db)):
+
+    pedidos = db.query(Pedido).order_by(Pedido.fecha.desc()).all()
+    productos = obtener_productos_shopify()
+    amazon_status = obtener_estado_amazon()
+
+    return render_panel_html(pedidos, productos, amazon_status)
