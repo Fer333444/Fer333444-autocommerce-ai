@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>📦 Productos Shopify – Panel Admin</title>
+
+    <!-- Estilos -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f8;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .btn-sync {
+            display: inline-block;
+            padding: 10px 15px;
+            background: #1a73e8;
+            color: white;
+            border-radius: 6px;
+            text-decoration: none;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .btn-sync:hover {
+            background: #0c56c9;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            margin-top: 20px;
+        }
+
+        th {
+            background: #333;
+            color: white;
+            padding: 12px;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        tr:hover {
+            background: #f1f1f1;
+        }
+
+        img {
+            max-width: 60px;
+            border-radius: 4px;
+        }
+    </style>
+
+    <!-- JQuery + DataTables -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+</head>
+
+<body>
+
+<h1>🛍️ Lista de Productos Shopify</h1>
+
+<a class="btn-sync" onclick="syncProducts()">🔄 Sincronizar Productos</a>
+
+<table id="productsTable">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Imagen</th>
+            <th>Título</th>
+            <th>Precio</th>
+            <th>Estado</th>
+            <th>Shopify</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for p in products %}
+        <tr>
+            <td>{{ p.id }}</td>
+
+            <td>
+                {% if p.image %}
+                    <img src="{{ p.image }}">
+                {% endif %}
+            </td>
+
+            <td>{{ p.title }}</td>
+            <td>{{ p.price }}</td>
+            <td>{{ p.status }}</td>
+
+            <td>
+                <a target="_blank"
+                   href="https://{{ shopify_domain }}/admin/products/{{ p.shopify_id }}">
+                    🔗 Abrir
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Scripts -->
+<script>
+$(document).ready(function () {
+    $("#productsTable").DataTable();
+});
+
+function syncProducts() {
+    fetch("/admin/products/sync", { method: "POST" })
+        .then(r => r.json())
+        .then(d => {
+            alert("Productos importados: " + d.imported);
+            location.reload();
+        })
+        .catch(err => alert("Error al sincronizar: " + err));
+}
+</script>
+
+</body>
+</html>

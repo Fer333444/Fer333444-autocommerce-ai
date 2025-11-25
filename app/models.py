@@ -1,5 +1,3 @@
-# app/models.py
-
 from sqlalchemy import Column, Integer, String, Numeric, BigInteger, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -27,3 +25,19 @@ class OrderItem(Base):
     price = Column(Numeric(10,2))
 
     order = relationship("Order", back_populates="items")
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shopify_id = Column(BigInteger, unique=True, index=True)
+    title = Column(String, nullable=False)
+    body_html = Column(String)
+    vendor = Column(String)
+    product_type = Column(String)
+    status = Column(String)
+    image = Column(String)
+    price = Column(Numeric(10, 2))
+    created_at = Column(String)
+    updated_at = Column(String)
