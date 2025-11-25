@@ -9,6 +9,7 @@ from app.database import engine, Base
 # Routers
 from app.routers import (
     admin_orders,
+    admin_products,       # ⬅️ FALTABA ESTE
     shopify_webhook,
     shopify_products
 )
@@ -35,15 +36,15 @@ templates = Jinja2Templates(directory="app/templates")
 # ---------------------------------------------------------
 #  ARCHIVOS ESTÁTICOS
 # ---------------------------------------------------------
-# (Esta carpeta ya existe gracias al .gitkeep)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # ---------------------------------------------------------
 #  INCLUIR ROUTERS
 # ---------------------------------------------------------
-app.include_router(admin_orders.router)      # Panel admin de pedidos
-app.include_router(shopify_webhook.router)   # Webhooks de Shopify
-app.include_router(shopify_products.router)  # Creación/envío de productos a Shopify
+app.include_router(admin_orders.router)       # Panel de pedidos
+app.include_router(admin_products.router)     # Panel de productos  ⬅️ NUEVO
+app.include_router(shopify_webhook.router)    # Webhooks Shopify
+app.include_router(shopify_products.router)   # Crear productos desde API
 
 # ---------------------------------------------------------
 #  RUTA PRINCIPAL
@@ -54,7 +55,8 @@ def home():
         "status": "ok",
         "message": "Autocommerce AI Backend funcionando correctamente 🧠⚡",
         "docs": "/docs",
-        "admin_panel": "/admin/orders",
+        "admin_orders": "/admin/orders",
+        "admin_products": "/admin/products",   # ⬅️ NUEVA URL
         "shopify_test_product": "/shopify/test"
     }
 
