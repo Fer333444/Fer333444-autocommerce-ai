@@ -1,55 +1,49 @@
-from fastapi import APIRouter, Request, Header
-import hmac
-import hashlib
-import base64
+# app/routers/shopify_products.py
+
+from fastapi import APIRouter
 import os
-import json
+import requests
 
 router = APIRouter(
     prefix="/shopify",
-    tags=["Shopify Webhooks"]
+    tags=["Shopify Products"]
 )
 
-SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET")
+SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+SHOPIFY_STORE_URL = os.getenv("SHOPIFY_STORE_URL")
 
 
-# --------------------------------------------------
-# 🛡️ VALIDAR QUE EL WEBHOOK VIENE DE SHOPIFY
-# --------------------------------------------------
-def verify_webhook(hmac_header: str, body: bytes) -> bool:
-    digest = hmac.new(
-        SHOPIFY_API_SECRET.encode("utf-8"),
-        body,
-        hashlib.sha256
-    ).digest()
+# ---------------------------------------------------------
+# CREAR PRODUCTO EN SHOPIFY
+# ---------------------------------------------------------
+@router.get("/test")
+def test_shopify_product():
+    """Crea un producto de prueba en Shopify"""
 
-    calculated_hmac = base64.b64encode(digest).decode()
+    if not SHOPIFY_ACCESS_TOKEN or not SHOPIFY_STORE_URL:
+        return {"error": "Missing Shopify environment variables"}
 
-    return hmac.compare_digest(calculated_hmac, hmac_header)
+    api_url = f"https://{SHOPIFY_STORE_URL}/admin/api/2024-07/products.json"
 
+    payload = {
+        "product": {
+            "title": "Producto Autocommerce AI (Test)",
+            "body_html": "Creado automáticamente desde FastAPI.",
+            "variants": [{ "price": "19.99" }],
+            "images": [{
+                "src": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/No_image_available.svg/1024px-No_image_available.svg.png"
+            }]
+        }
+    }
 
-# --------------------------------------------------
-# 📦 WEBHOOK — ACTUALIZACIÓN DE PRODUCTO
-# --------------------------------------------------
-@router.post("/webhook/products/update")
-async def webhook_products_update(
-    request: Request,
-    x_shopify_hmac_sha256: str = Header(None)
-):
-    body = await request.body()
+    headers = {
+        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+        "Content-Type": "application/json"
+    }
 
-    # 1. Validar firma
-    if not verify_webhook(x_shopify_hmac_sha256, body):
-        return {"status": "error", "message": "Invalid HMAC"}
+    response = requests.post(api_url, json=payload, headers=headers)
 
-    # 2. Convertir JSON
-    data = json.loads(body)
-
-    product_id = data.get("id")
-    title = data.get("title")
-
-    print("📦 Webhook recibido: PRODUCT UPDATE")
-    print(f"ID: {product_id}")
-    print(f"Título: {title}")
-
-    return {"status": "ok", "product_id": product_id, "title": title}
+    return {
+        "status": "ok",
+        "result": response.json()
+    }
