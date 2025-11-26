@@ -1,75 +1,64 @@
-# app/main.py
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
-from app.database import engine, Base
-
-# Importar routers
+from app.database import Base, engine
 from app.routers import (
+    shopify_webhook,
+    shopify_products_webhook,
     admin_orders,
     admin_products,
-    shopify_webhook,              # Webhooks de órdenes
-    shopify_products_webhook,     # Webhooks de productos
-    shopify_products              # API Shopify (test)
+    products,
+    orders
 )
 
-# ---------------------------------------------------------
-#  CREAR TABLAS EN LA BASE DE DATOS
-# ---------------------------------------------------------
+# ============================================================
+# 🚀 INICIALIZACIÓN DE LA APP
+# ============================================================
+app = FastAPI(title="Autocommerce AI", version="1.0")
+
+# ============================================================
+# 🧱 CREAR TABLAS AUTOMÁTICAMENTE EN NEON
+# ============================================================
 Base.metadata.create_all(bind=engine)
 
-# ---------------------------------------------------------
-#  INICIAR FASTAPI
-# ---------------------------------------------------------
-app = FastAPI(
-    title="Autocommerce AI Backend",
-    description="Sistema de Pedidos + Webhooks Shopify + Panel Admin",
-    version="1.0"
+# ============================================================
+# 🌍 CORS
+# ============================================================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-#  PLANTILLAS HTML
-# ---------------------------------------------------------
-templates = Jinja2Templates(directory="app/templates")
+# ============================================================
+# 🎨 TEMPLATES Y ESTÁTICOS
+# ============================================================
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ---------------------------------------------------------
-#  ARCHIVOS ESTÁTICOS
-# ---------------------------------------------------------
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-# ---------------------------------------------------------
-#  INCLUIR ROUTERS
-# ---------------------------------------------------------
-app.include_router(admin_orders.router)           # Panel de pedidos
-app.include_router(admin_products.router)         # Panel de productos
-app.include_router(shopify_webhook.router)        # Webhooks órdenes
-app.include_router(shopify_products_webhook.router)  # Webhooks productos
-app.include_router(shopify_products.router)       # API Shopify (test endpoint)
-
-# ---------------------------------------------------------
-#  RUTA PRINCIPAL
-# ---------------------------------------------------------
+# ============================================================
+# 🏠 HOME
+# ============================================================
 @app.get("/")
-def home():
-    return {
-        "status": "ok",
-        "message": "Autocommerce AI Backend funcionando correctamente 🧠⚡",
-        "docs": "/docs",
-        "admin_orders": "/admin/orders",
-        "admin_products": "/admin/products",
-        "shopify_test_product": "/shopify/test",
-        "webhooks": {
-            "order_create": "/webhooks/orders/create",
-            "order_delete": "/webhooks/orders/delete",
-            "product_update": "/shopify/webhook/products/update"
-        }
-    }
+def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
-# ---------------------------------------------------------
-#  HEALTH CHECK
-# ---------------------------------------------------------
+# ============================================================
+# 🔌 INCLUIR TODOS LOS ROUTERS
+# ============================================================
+app.include_router(shopify_webhook.router)
+app.include_router(shopify_products_webhook.router)
+app.include_router(admin_orders.router)
+app.include_router(admin_products.router)
+app.include_router(products.router)
+app.include_router(orders.router)
+
+# ============================================================
+# ❤️ HEALTHCHECK
+# ============================================================
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    return {"status": "ok"}
