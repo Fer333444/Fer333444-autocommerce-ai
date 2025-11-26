@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Request, Header, Depends
-from sqlalchemy.orm import Session
-import hmac, hashlib, base64, json, os
+# app/routers/shopify_products_webhook.py
 
-from app.database import get_db
-from app.models import Product
+from fastapi import APIRouter, Request, Header
+import hmac
+import hashlib
+import base64
+import os
+import json
 
-router = APIRouter(prefix="/shopify/webhook", tags=["Shopify Webhooks"])
+router = APIRouter(
+    prefix="/shopify/webhook",
+    tags=["Shopify Products Webhooks"]
+)
 
 SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET")
-
 
 def verify_hmac(hmac_header: str, body: bytes) -> bool:
     digest = hmac.new(
@@ -17,14 +21,15 @@ def verify_hmac(hmac_header: str, body: bytes) -> bool:
         hashlib.sha256
     ).digest()
 
-    expected_hmac = base64.b64encode(digest).decode()
-    return hmac.compare_digest(expected_hmac, hmac_header)
+    calculated_hmac = base64.b64encode(digest).decode()
+    return hmac.compare_digest(calculated_hmac, hmac_header)
 
-
+# -------------------------------------------------------
+# 🛍 PRODUCT UPDATED
+# -------------------------------------------------------
 @router.post("/products/update")
-async def webhook_products_update(
+async def products_update(
     request: Request,
-    db: Session = Depends(get_db),
     x_shopify_hmac_sha256: str = Header(None)
 ):
     body = await request.body()
@@ -34,29 +39,7 @@ async def webhook_products_update(
 
     data = json.loads(body)
 
-    shopify_id = data["id"]
-    product = db.query(Product).filter(Product.shopify_id == shopify_id).first()
-    if not product:
-        product = Product(shopify_id=shopify_id)
+    print("🛍 Webhook recibido: PRODUCT UPDATED")
+    print(json.dumps(data, indent=2))
 
-    product.title = data["title"]
-    product.body_html = data.get("body_html")
-    product.vendor = data.get("vendor")
-    product.product_type = data.get("product_type")
-    product.status = data.get("status")
-
-    if data.get("image"):
-        product.image = data["image"]["src"]
-
-    if data.get("variants"):
-        product.price = data["variants"][0]["price"]
-
-    product.created_at = data.get("created_at")
-    product.updated_at = data.get("updated_at")
-
-    db.add(product)
-    db.commit()
-
-    print("PRODUCTO GUARDADO/ACTUALIZADO:", shopify_id)
-
-    return {"status": "ok", "shopify_id": shopify_id}
+    return {"status": "ok"}

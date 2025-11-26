@@ -6,12 +6,13 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base
 
-# Routers
+# Importar routers
 from app.routers import (
     admin_orders,
-    admin_products,       # ⬅️ FALTABA ESTE
-    shopify_webhook,
-    shopify_products
+    admin_products,
+    shopify_webhook,              # Webhooks de órdenes
+    shopify_products_webhook,     # Webhooks de productos
+    shopify_products              # API Shopify (test)
 )
 
 # ---------------------------------------------------------
@@ -24,7 +25,7 @@ Base.metadata.create_all(bind=engine)
 # ---------------------------------------------------------
 app = FastAPI(
     title="Autocommerce AI Backend",
-    description="Sistema de pedidos + Webhook + Panel Admin + Productos Shopify",
+    description="Sistema de Pedidos + Webhooks Shopify + Panel Admin",
     version="1.0"
 )
 
@@ -41,10 +42,11 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # ---------------------------------------------------------
 #  INCLUIR ROUTERS
 # ---------------------------------------------------------
-app.include_router(admin_orders.router)       # Panel de pedidos
-app.include_router(admin_products.router)     # Panel de productos  ⬅️ NUEVO
-app.include_router(shopify_webhook.router)    # Webhooks Shopify
-app.include_router(shopify_products.router)   # Crear productos desde API
+app.include_router(admin_orders.router)           # Panel de pedidos
+app.include_router(admin_products.router)         # Panel de productos
+app.include_router(shopify_webhook.router)        # Webhooks órdenes
+app.include_router(shopify_products_webhook.router)  # Webhooks productos
+app.include_router(shopify_products.router)       # API Shopify (test endpoint)
 
 # ---------------------------------------------------------
 #  RUTA PRINCIPAL
@@ -56,8 +58,13 @@ def home():
         "message": "Autocommerce AI Backend funcionando correctamente 🧠⚡",
         "docs": "/docs",
         "admin_orders": "/admin/orders",
-        "admin_products": "/admin/products",   # ⬅️ NUEVA URL
-        "shopify_test_product": "/shopify/test"
+        "admin_products": "/admin/products",
+        "shopify_test_product": "/shopify/test",
+        "webhooks": {
+            "order_create": "/webhooks/orders/create",
+            "order_delete": "/webhooks/orders/delete",
+            "product_update": "/shopify/webhook/products/update"
+        }
     }
 
 # ---------------------------------------------------------

@@ -1,55 +1,65 @@
-from fastapi import APIRouter, Request
-import logging
+# app/routers/shopify_webhook.py
+
+from fastapi import APIRouter, Request, Header
+import hmac
+import hashlib
+import base64
+import os
 import json
 
-from app.database import SessionLocal
-from app.models import Order, OrderItem
+router = APIRouter(
+    prefix="/webhooks",
+    tags=["Shopify Orders Webhooks"]
+)
 
-router = APIRouter()
-logger = logging.getLogger(__name__)
+SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET")
 
+def verify_hmac(hmac_header: str, body: bytes) -> bool:
+    digest = hmac.new(
+        SHOPIFY_API_SECRET.encode("utf-8"),
+        body,
+        hashlib.sha256
+    ).digest()
 
-@router.post("/webhooks/orders/create")
-async def shopify_order_create(request: Request):
-    payload = await request.body()
-    data = json.loads(payload.decode())
+    calculated_hmac = base64.b64encode(digest).decode()
+    return hmac.compare_digest(calculated_hmac, hmac_header)
 
-    logger.info("📦 Webhook recibido: orders/create")
+# -------------------------------------------------------
+# 🛒 ORDER CREATED
+# -------------------------------------------------------
+@router.post("/orders/create")
+async def order_created(
+    request: Request,
+    x_shopify_hmac_sha256: str = Header(None)
+):
+    body = await request.body()
 
-    db = SessionLocal()
+    if not verify_hmac(x_shopify_hmac_sha256, body):
+        return {"status": "error", "message": "Invalid HMAC"}
 
-    try:
-        # Crear pedido
-        order = Order(
-            shopify_order_id=data.get("id"),
-            order_number=data.get("order_number"),
-            financial_status=data.get("financial_status"),
-        )
+    data = json.loads(body)
 
-        db.add(order)
-        db.commit()
-        db.refresh(order)
+    print("🛒 Webhook recibido: ORDER CREATED")
+    print(json.dumps(data, indent=2))
 
-        # Guardar items
-        for item in data.get("line_items", []):
-            order_item = OrderItem(
-                order_id=order.id,
-                product_id=item.get("product_id"),
-                variant_id=item.get("variant_id"),
-                title=item.get("title"),
-                price=float(item.get("price", 0)),
-                quantity=item.get("quantity", 1),
-            )
-            db.add(order_item)
+    return {"status": "ok"}
 
-        db.commit()
-        logger.info("✅ Pedido guardado correctamente en Neon")
+# -------------------------------------------------------
+# ❌ ORDER DELETED
+# -------------------------------------------------------
+@router.post("/orders/delete")
+async def order_deleted(
+    request: Request,
+    x_shopify_hmac_sha256: str = Header(None)
+):
+    body = await request.body()
 
-    except Exception as e:
-        logger.error(f"❌ Error procesando webhook: {e}")
-        db.rollback()
+    if not verify_hmac(x_shopify_hmac_sha256, body):
+        return {"status": "error", "message": "Invalid HMAC"}
 
-    finally:
-        db.close()
+    data = json.loads(body)
+
+    print("🗑 Webhook recibido: ORDER DELETED")
+    print(json.dumps(data, indent=2))
 
     return {"status": "ok"}
