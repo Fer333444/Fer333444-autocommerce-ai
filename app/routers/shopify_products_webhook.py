@@ -1,45 +1,62 @@
 # app/routers/shopify_products_webhook.py
 
-from fastapi import APIRouter, Request, Header
-import hmac
-import hashlib
-import base64
-import os
-import json
+from fastapi import APIRouter, Request, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-router = APIRouter(
-    prefix="/shopify/webhook",
-    tags=["Shopify Products Webhooks"]
-)
+from app.database import get_db
+from app.models import Product
 
-SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET")
+router = APIRouter(tags=["Shopify Products"])
 
-def verify_hmac(hmac_header: str, body: bytes) -> bool:
-    digest = hmac.new(
-        SHOPIFY_API_SECRET.encode("utf-8"),
-        body,
-        hashlib.sha256
-    ).digest()
 
-    calculated_hmac = base64.b64encode(digest).decode()
-    return hmac.compare_digest(calculated_hmac, hmac_header)
-
-# -------------------------------------------------------
-# 🛍 PRODUCT UPDATED
-# -------------------------------------------------------
 @router.post("/products/update")
-async def products_update(
-    request: Request,
-    x_shopify_hmac_sha256: str = Header(None)
-):
-    body = await request.body()
+async def products_update(request: Request, db: Session = Depends(get_db)):
+    try:
+        payload = await request.json()
 
-    if not verify_hmac(x_shopify_hmac_sha256, body):
-        return {"status": "error", "message": "Invalid HMAC"}
+        shopify_id = payload.get("id")
+        title = payload.get("title")
+        body_html = payload.get("body_html")
+        vendor = payload.get("vendor")
+        product_type = payload.get("product_type")
+        status = payload.get("status")
+        created_at = payload.get("created_at")
+        updated_at = payload.get("updated_at")
 
-    data = json.loads(body)
+        image = None
+        if payload.get("image"):
+            image = payload["image"].get("src")
 
-    print("🛍 Webhook recibido: PRODUCT UPDATED")
-    print(json.dumps(data, indent=2))
+        product = db.query(Product).filter(Product.shopify_id == shopify_id).first()
 
-    return {"status": "ok"}
+        if product:
+            # update
+            product.title = title
+            product.body_html = body_html
+            product.vendor = vendor
+            product.product_type = product_type
+            product.status = status
+            product.image = image
+            product.updated_at = updated_at
+        else:
+            # create
+            product = Product(
+                shopify_id=shopify_id,
+                title=title,
+                body_html=body_html,
+                vendor=vendor,
+                product_type=product_type,
+                status=status,
+                image=image,
+                created_at=created_at,
+                updated_at=updated_at
+            )
+            db.add(product)
+
+        db.commit()
+
+        return {"status": "ok"}
+
+    except Exception as e:
+        print("Product webhook error:", e)
+        raise HTTPException(status_code=400, detail="Invalid product webhook")

@@ -7,16 +7,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Product
 
-router = APIRouter(prefix="/admin", tags=["Admin Products"])
+router = APIRouter(tags=["Admin Products"])
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory="templates")
 
 
 @router.get("/products")
 def admin_products(request: Request, db: Session = Depends(get_db)):
     products = db.query(Product).all()
 
-    # Convertir SQLAlchemy -> dict
     products_data = [
         {
             "id": p.id,

@@ -14,16 +14,15 @@ from app.routers.admin_orders import router as admin_orders_router
 from app.routers.admin_products import router as admin_products_router
 
 # ============================================================
-# 🚀 INICIALIZACIÓN DE LA APP
+# 🚀 INICIALIZACIÓN
 # ============================================================
 app = FastAPI(
     title="Autocommerce AI Backend",
-    description="Sistema completo Shopify + Webhooks + Panel Admin",
     version="1.0.0"
 )
 
 # ============================================================
-# 🧱 CREAR TABLAS AUTOMÁTICAMENTE EN NEON
+# 🧱 CREAR TABLAS
 # ============================================================
 Base.metadata.create_all(bind=engine)
 
@@ -39,10 +38,10 @@ app.add_middleware(
 )
 
 # ============================================================
-# 🎨 TEMPLATES Y ARCHIVOS ESTÁTICOS
+# 🎨 TEMPLATES Y STATIC (CORREGIDO)
 # ============================================================
-templates = Jinja2Templates(directory="app/templates")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="templates")  # 👈 CORREGIDO
+app.mount("/static", StaticFiles(directory="static"), name="static")  # 👈 CORREGIDO
 
 # ============================================================
 # 🏠 HOME
@@ -53,10 +52,9 @@ def home(request: Request):
         "index.html",
         {
             "request": request,
-            "status": "online",
             "admin_products": "/admin/products",
             "admin_orders": "/admin/orders",
-            "webhook_test": "/shopify/test"
+            "status": "ok"
         }
     )
 
@@ -65,7 +63,7 @@ def home(request: Request):
 # ============================================================
 @app.get("/health")
 def health():
-    return {"status": "healthy", "service": "autocommerce-ai"}
+    return {"status": "healthy"}
 
 # ============================================================
 # 🔌 ROUTERS
@@ -76,7 +74,7 @@ app.include_router(admin_orders_router, prefix="/admin")
 app.include_router(admin_products_router, prefix="/admin")
 
 # ============================================================
-# 🧪 TEST PARA SHOPIFY
+# 🧪 TEST WEBHOOK
 # ============================================================
 @app.get("/shopify/test")
 def webhook_test():

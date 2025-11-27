@@ -7,16 +7,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Order
 
-router = APIRouter(prefix="/admin", tags=["Admin Orders"])
+router = APIRouter(tags=["Admin Orders"])
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory="templates")
 
 
 @router.get("/orders")
 def admin_orders(request: Request, db: Session = Depends(get_db)):
     orders = db.query(Order).all()
 
-    # Convertir objetos SQLAlchemy -> diccionario (EVITA EL ERROR)
     orders_data = []
     for o in orders:
         orders_data.append({
