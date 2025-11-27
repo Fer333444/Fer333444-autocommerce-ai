@@ -14,20 +14,21 @@ from app.routers.admin_orders import router as admin_orders_router
 from app.routers.admin_products import router as admin_products_router
 
 # ============================================================
-# 🚀 INICIALIZACIÓN
+# 🚀 INICIALIZACIÓN DE LA APP
 # ============================================================
 app = FastAPI(
     title="Autocommerce AI Backend",
+    description="Sistema completo Shopify + Webhooks + Panel Admin",
     version="1.0.0"
 )
 
 # ============================================================
-# 🧱 CREAR TABLAS
+# 🧱 CREAR TABLAS AUTOMÁTICAMENTE EN NEON
 # ============================================================
 Base.metadata.create_all(bind=engine)
 
 # ============================================================
-# 🌍 CORS
+# 🌍 CORS (OBLIGATORIO PARA RENDER + SHOPIFY)
 # ============================================================
 app.add_middleware(
     CORSMiddleware,
@@ -38,10 +39,11 @@ app.add_middleware(
 )
 
 # ============================================================
-# 🎨 TEMPLATES Y STATIC (CORREGIDO)
+# 🎨 TEMPLATES Y ARCHIVOS ESTÁTICOS (CORREGIDO)
 # ============================================================
-templates = Jinja2Templates(directory="templates")  # 👈 CORREGIDO
-app.mount("/static", StaticFiles(directory="static"), name="static")  # 👈 CORREGIDO
+# 👉 Importante: tu estructura es /app/main.py, por eso las rutas deben ser "app/templates"
+templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # ============================================================
 # 🏠 HOME
@@ -52,9 +54,10 @@ def home(request: Request):
         "index.html",
         {
             "request": request,
+            "status": "online",
             "admin_products": "/admin/products",
             "admin_orders": "/admin/orders",
-            "status": "ok"
+            "webhook_test": "/shopify/test"
         }
     )
 
@@ -63,10 +66,10 @@ def home(request: Request):
 # ============================================================
 @app.get("/health")
 def health():
-    return {"status": "healthy"}
+    return {"status": "healthy", "service": "autocommerce-ai"}
 
 # ============================================================
-# 🔌 ROUTERS
+# 🔌 ROUTERS (DEBES TENER ESTO ASÍ)
 # ============================================================
 app.include_router(shopify_webhook_router, prefix="/shopify")
 app.include_router(shopify_products_webhook_router, prefix="/shopify")
@@ -74,8 +77,12 @@ app.include_router(admin_orders_router, prefix="/admin")
 app.include_router(admin_products_router, prefix="/admin")
 
 # ============================================================
-# 🧪 TEST WEBHOOK
+# 🧪 TEST ENDPOINT (DEVUELVE 200)
 # ============================================================
 @app.get("/shopify/test")
 def webhook_test():
     return {"message": "Webhook endpoint activo 🎉", "status": "ok"}
+
+# ============================================================
+# FIN DEL MAIN
+# ============================================================
