@@ -28,7 +28,7 @@ app = FastAPI(
 Base.metadata.create_all(bind=engine)
 
 # ============================================================
-# 🌍 CORS (OBLIGATORIO PARA RENDER + SHOPIFY)
+# 🌍 CORS
 # ============================================================
 app.add_middleware(
     CORSMiddleware,
@@ -42,7 +42,9 @@ app.add_middleware(
 # 🎨 TEMPLATES Y ARCHIVOS ESTÁTICOS
 # ============================================================
 templates = Jinja2Templates(directory="app/templates")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# ❗ CORRECTO: carpeta static está en la raíz del proyecto
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ============================================================
 # 🏠 HOME
@@ -68,20 +70,20 @@ def health():
     return {"status": "healthy", "service": "autocommerce-ai"}
 
 # ============================================================
-# 🔌 ROUTERS REGISTRADOS (TODAS LAS FUNCIONES)
+# 🔌 ROUTERS (SIN PREFIX EXTRA — YA LO TIENEN ADENTRO)
 # ============================================================
-app.include_router(shopify_webhook_router, prefix="/shopify")
-app.include_router(shopify_products_webhook_router, prefix="/shopify")
-app.include_router(admin_orders_router, prefix="/admin")
-app.include_router(admin_products_router, prefix="/admin")
+app.include_router(shopify_webhook_router)
+app.include_router(shopify_products_webhook_router)
+app.include_router(admin_orders_router)
+app.include_router(admin_products_router)
 
 # ============================================================
-# 🧪 TEST PARA SHOPIFY (DEVOLVER 200 OK)
+# 🧪 TEST SHOPIFY
 # ============================================================
 @app.get("/shopify/test")
 def webhook_test():
     return {"message": "Webhook endpoint activo 🎉", "status": "ok"}
 
 # ============================================================
-# FIN DEL MAIN.PY
+# FIN
 # ============================================================
