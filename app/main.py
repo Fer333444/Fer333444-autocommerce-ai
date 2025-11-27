@@ -42,9 +42,7 @@ app.add_middleware(
 # 🎨 TEMPLATES Y ARCHIVOS ESTÁTICOS
 # ============================================================
 templates = Jinja2Templates(directory="app/templates")
-
-# ❗ CORRECTO: carpeta static está en la raíz del proyecto
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # ============================================================
 # 🏠 HOME
@@ -70,20 +68,16 @@ def health():
     return {"status": "healthy", "service": "autocommerce-ai"}
 
 # ============================================================
-# 🔌 ROUTERS (SIN PREFIX EXTRA — YA LO TIENEN ADENTRO)
+# 🔌 ROUTERS
 # ============================================================
-app.include_router(shopify_webhook_router)
-app.include_router(shopify_products_webhook_router)
-app.include_router(admin_orders_router)
-app.include_router(admin_products_router)
+app.include_router(shopify_webhook_router, prefix="/shopify")
+app.include_router(shopify_products_webhook_router, prefix="/shopify")
+app.include_router(admin_orders_router, prefix="/admin")
+app.include_router(admin_products_router, prefix="/admin")
 
 # ============================================================
-# 🧪 TEST SHOPIFY
+# 🧪 TEST PARA SHOPIFY
 # ============================================================
 @app.get("/shopify/test")
 def webhook_test():
     return {"message": "Webhook endpoint activo 🎉", "status": "ok"}
-
-# ============================================================
-# FIN
-# ============================================================
